@@ -1,0 +1,343 @@
+import React, { useState, useEffect, useRef } from 'react';
+
+// --- 1. 假資料初始狀態 ---
+const INITIAL_ASSETS = [
+  {
+    id: 'US_STOCK-AAPL',
+    type: 'US_STOCK',
+    symbol: 'AAPL',
+    name: 'Apple Inc.',
+    currency: 'USD',
+    openPrice: 175.00,
+    currentPrice: 175.50,
+    high: 176.20,
+    low: 174.50,
+    volume: 52400000,
+  },
+  {
+    id: 'TW_STOCK-2330',
+    type: 'TW_STOCK',
+    symbol: '2330',
+    name: '台積電 (TSMC)',
+    currency: 'TWD',
+    openPrice: 780.00,
+    currentPrice: 785.00,
+    high: 790.00,
+    low: 778.00,
+    volume: 28500,
+  },
+  {
+    id: 'COMMODITY-CL',
+    type: 'COMMODITY',
+    symbol: 'CL',
+    name: 'WTI 原油 (Crude Oil)',
+    currency: 'USD',
+    openPrice: 80.50,
+    currentPrice: 80.20,
+    high: 81.10,
+    low: 79.80,
+    volume: 125000,
+  },
+  {
+    id: 'COMMODITY-GC',
+    type: 'COMMODITY',
+    symbol: 'GC',
+    name: '黃金 (Gold)',
+    currency: 'USD',
+    openPrice: 2150.00,
+    currentPrice: 2158.50,
+    high: 2165.00,
+    low: 2148.00,
+    volume: 85000,
+  },
+  {
+    id: 'CRYPTO-BTC',
+    type: 'CRYPTO',
+    symbol: 'BTC',
+    name: '比特幣 (Bitcoin)',
+    currency: 'USD',
+    openPrice: 67000.00,
+    currentPrice: 67250.00,
+    high: 68500.00,
+    low: 66200.00,
+    volume: 45000,
+  }
+];
+
+// --- 2. 輔助處理函式：判斷漲跌與顏色市場邏輯 ---
+const getMarketConfig = (type, change) => {
+  const isUp = change >= 0;
+  if (type === 'TW_STOCK') {
+    // 台股：紅漲綠跌
+    return {
+      textClass: isUp ? 'text-red-500' : change < 0 ? 'text-green-500' : 'text-gray-400',
+      bgClass: isUp ? 'bg-red-500/10' : change < 0 ? 'bg-green-500/10' : 'bg-gray-500/10',
+      flashUp: 'animate-flash-red', // 自訂紅閃
+      flashDown: 'animate-flash-green' // 自訂綠閃
+    };
+  } else {
+    // 美股、加密貨幣、大宗商品：綠漲紅跌
+    return {
+      textClass: isUp ? 'text-green-500' : change < 0 ? 'text-red-500' : 'text-gray-400',
+      bgClass: isUp ? 'bg-green-500/10' : change < 0 ? 'bg-red-500/10' : 'bg-gray-500/10',
+      flashUp: 'animate-flash-green', // 自訂綠閃
+      flashDown: 'animate-flash-red' // 自訂紅閃
+    };
+  }
+};
+
+// 格式化成交量
+const formatVolume = (vol) => {
+  if (vol >= 1000000) return `${(vol / 1000000).toFixed(2)}M`;
+  if (vol >= 1000) return `${(vol / 1000).toFixed(1)}K`;
+  return vol.toString();
+};
+
+// --- 3. 報價閃爍數字元件 ---
+const FlashPrice = ({ currentPrice, type, change, symbol }) => {
+  const prevPriceRef = useRef(currentPrice);
+  const [flashClass, setFlashClass] = useState('');
+
+  useEffect(() => {
+    if (currentPrice > prevPriceRef.current) {
+      // 價格上漲
+      const config = getMarketConfig(type, 1);
+      setFlashClass(config.flashUp);
+    } else if (currentPrice < prevPriceRef.current) {
+      // 價格下跌
+      const config = getMarketConfig(type, -1);
+      setFlashClass(config.flashDown);
+    }
+
+    prevPriceRef.current = currentPrice;
+
+    // 閃爍完畢後移除 class
+    const timer = setTimeout(() => setFlashClass(''), 800);
+    return () => clearTimeout(timer);
+  }, [currentPrice, type]);
+
+  const decimalPlaces = symbol === 'BTC' ? 0 : 2;
+
+  return (
+    <span className={`px-2 py-1 rounded transition-colors duration-500 font-mono font-bold text-2xl ${flashClass}`}>
+      {currentPrice.toFixed(decimalPlaces)}
+    </span>
+  );
+};
+
+// --- 4. 主頁面元件 ---
+export default function FinancialDashboard() {
+  const [assets, setAssets] = useState(INITIAL_ASSETS);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // 模擬載入狀態
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // 核心：即時模擬跳動（每秒更新）
+  useEffect(() => {
+    if (isLoading || error) return;
+
+    const interval = setInterval(() => {
+      setAssets((prevAssets) =>
+        prevAssets.map((asset) => {
+          // 隨機產生 -0.5% 到 +0.5% 的變動比例
+          const randomPercent = (Math.random() - 0.5) * 0.01;
+          const priceDiff = asset.currentPrice * randomPercent;
+          const nextPrice = Math.max(0.01, asset.currentPrice + priceDiff);
+
+          // 隨機增加成交量
+          const volIncr = Math.floor(Math.random() * 10) + 1;
+
+          // 更新當日最高與最低
+          const nextHigh = nextPrice > asset.high ? nextPrice : asset.high;
+          const nextLow = nextPrice < asset.low ? nextPrice : asset.low;
+
+          return {
+            ...asset,
+            currentPrice: nextPrice,
+            high: nextHigh,
+            low: nextLow,
+            volume: asset.volume + volIncr,
+          };
+        })
+      );
+    }, 1000);
+
+    // 防 Bug 關鍵：在 return 中清除定時器，防止 Memory Leak
+    return () => clearInterval(interval);
+  }, [isLoading, error]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex flex-col justify-center items-center">
+        <div className="animate-pulse text-xl font-semibold tracking-wider">即時市場數據載入中...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex justify-center items-center">
+        <div className="text-red-400 bg-red-500/10 p-4 rounded-lg border border-red-500/20">
+          系統錯誤：{error}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 lg:p-8 selection:bg-indigo-500 selection:text-white">
+      {/* 標題與樣式注入 */}
+      <header className="mb-8 max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800 pb-5">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400 bg-clip-text text-transparent">
+            Global Finance Radar
+          </h1>
+          <p className="text-sm text-slate-400 mt-1">全端模擬整合報價系統（每秒即時更新）</p>
+        </div>
+        <div className="flex items-center gap-4 text-xs font-mono bg-slate-900 px-4 py-2 rounded-full border border-slate-800 self-start sm:self-auto">
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500 animate-ping"></span> 連線中</span>
+          <span className="text-slate-500">|</span>
+          <span className="text-red-500">台股: 紅漲綠跌</span>
+          <span className="text-green-500">海外/加密: 綠漲紅跌</span>
+        </div>
+      </header>
+
+      {/* CSS 動態閃爍特效注入（免去外掛額外 CSS 檔案） */}
+      <style>{`
+        @keyframes flashGreen {
+          0% { background-color: rgba(34, 197, 94, 0.5); color: #fff; }
+          100% { background-color: transparent; }
+        }
+        @keyframes flashRed {
+          0% { background-color: rgba(239, 68, 68, 0.5); color: #fff; }
+          100% { background-color: transparent; }
+        }
+        .animate-flash-green { animation: flashGreen 0.8s ease-out; }
+        .animate-flash-red { animation: flashRed 0.8s ease-out; }
+      `}</style>
+
+      <main className="max-w-7xl mx-auto space-y-8">
+        
+        {/* 1. 卡片式佈局：支援 手機一列 (grid-cols-1)、平板兩列 (md:grid-cols-2)、電腦三列 (lg:grid-cols-3) */}
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {assets.map((asset) => {
+            const change = asset.currentPrice - asset.openPrice;
+            const changePercent = (change / asset.openPrice) * 100;
+            const market = getMarketConfig(asset.type, change);
+            const isUp = change >= 0;
+
+            return (
+              // 防 Bug 關鍵：key 使用資產唯一識別碼 id，不使用 index
+              <div 
+                key={asset.id} 
+                className="bg-slate-900 border border-slate-800/80 rounded-2xl p-5 hover:border-slate-700/60 transition-all duration-300 shadow-xl flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <span className="text-xs px-2 py-0.5 rounded-md font-medium tracking-wide bg-slate-800 text-slate-400 border border-slate-700/50 mr-2">
+                        {asset.type}
+                      </span>
+                      <span className="font-mono text-xl font-bold tracking-wide text-white">{asset.symbol}</span>
+                      <p className="text-xs text-slate-400 mt-1">{asset.name}</p>
+                    </div>
+                    <span className="text-xs text-slate-500 font-mono font-bold">{asset.currency}</span>
+                  </div>
+
+                  <div className="flex justify-between items-baseline my-4">
+                    <div className="text-slate-400 text-xs font-medium">當前報價</div>
+                    <FlashPrice 
+                      currentPrice={asset.currentPrice} 
+                      type={asset.type} 
+                      change={change} 
+                      symbol={asset.symbol} 
+                    />
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-800/60 pt-3 mt-2 grid grid-cols-2 gap-2">
+                  <div className={`rounded-xl p-2.5 ${market.bgClass} ${market.textClass} flex flex-col justify-center`}>
+                    <div className="text-[10px] uppercase tracking-wider opacity-60 font-medium mb-0.5">漲跌幅</div>
+                    <div className="font-mono font-bold text-base">
+                      {isUp ? '+' : ''}{change.toFixed(2)} ({isUp ? '+' : ''}{changePercent.toFixed(2)}%)
+                    </div>
+                  </div>
+                  <div className="bg-slate-950/40 rounded-xl p-2.5 text-slate-400 flex flex-col justify-center border border-slate-800/30">
+                    <div className="text-[10px] uppercase tracking-wider opacity-60 font-medium mb-0.5">24h 成交量</div>
+                    <div className="font-mono font-semibold text-slate-200 text-base">
+                      {formatVolume(asset.volume)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </section>
+
+        {/* 2. 表格詳細數據區域：外層加上 overflow-x-auto 防 RWD 爆版 */}
+        <section className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-800 bg-slate-900/50">
+            <h2 className="text-lg font-bold text-white">詳細盤中數據</h2>
+          </div>
+          
+          {/* 防 Bug 關鍵：表格在手機板必須加上 overflow-x-auto */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-950/40 border-b border-slate-800 text-slate-400 text-xs font-semibold tracking-wider font-mono">
+                  <th className="p-4 pl-6">資產代號</th>
+                  <th className="p-4">當前價格</th>
+                  <th className="p-4">今日開盤</th>
+                  <th className="p-4">最高價</th>
+                  <th className="p-4">最低價</th>
+                  <th className="p-4 pr-6 text-right">漲跌幅 (開盤計)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/50 text-sm font-mono">
+                {assets.map((asset) => {
+                  const change = asset.currentPrice - asset.openPrice;
+                  const changePercent = (change / asset.openPrice) * 100;
+                  const market = getMarketConfig(asset.type, change);
+                  const isUp = change >= 0;
+                  const decimalPlaces = asset.symbol === 'BTC' ? 0 : 2;
+
+                  return (
+                    <tr key={`table-${asset.id}`} className="hover:bg-slate-800/20 transition-colors">
+                      <td className="p-4 pl-6 font-bold text-white">
+                        {asset.symbol}
+                        <span className="text-[10px] font-normal text-slate-500 block">{asset.name}</span>
+                      </td>
+                      <td className="p-4 font-semibold text-slate-200">
+                        {asset.currentPrice.toFixed(decimalPlaces)}
+                      </td>
+                      <td className="p-4 text-slate-400">
+                        {asset.openPrice.toFixed(decimalPlaces)}
+                      </td>
+                      <td className="p-4 text-rose-400/90">
+                        {asset.high.toFixed(decimalPlaces)}
+                      </td>
+                      <td className="p-4 text-emerald-400/90">
+                        {asset.low.toFixed(decimalPlaces)}
+                      </td>
+                      <td className={`p-4 pr-6 text-right font-bold ${market.textClass}`}>
+                        {isUp ? '▲' : change < 0 ? '▼' : ''} {changePercent.toFixed(2)}%
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  );
+}
